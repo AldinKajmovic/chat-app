@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHAT APP</title>
+
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+
+        .container {
+            width: 80%;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header h1 {
+            text-align: center;
+            color: #4CAF50;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+        }
+
+        #logout-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 1.2rem;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #logout-button:hover {
+            background-color: #45a049;
+        }
+
+        .chat-options {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .chat-options .btn {
+            background-color: #4CAF50;
+            color: white;
+            font-size: 1.2rem;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .chat-options .btn:hover {
+            background-color: #45a049;
+        }
+
+        .inbox h2 {
+            text-align: center;
+            color: #333;
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+        }
+
+        .chat-list {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .chat-item {
+            background-color: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-name {
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .chat-item:hover {
+            background-color: #4CAF50;
+            color: white;
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>CHAT APP</h1>
+        <!-- Logout Button -->
+        <button id="logout-button" class="btn logout-btn">Logout</button>
+    </header>
+
+    <section class="chat-options">
+        <button class="btn" data-toggle="modal" data-target="#groupModal">Create group conversation</button>
+        <button class="btn" data-toggle="modal" data-target="#privateModal">Create private conversation</button>
+    </section>
+
+    <section class="inbox">
+        <h2>Inbox</h2>
+        <ul class="chat-list" id="chat-list">
+
+        </ul>
+    </section>
+</div>
+
+<!-- Private Modal -->
+<div class="modal fade" id="privateModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="privateModalLabel">Private conversation</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <label for="user-select">Choose users:</label>
+                <select class="form-control" id="user-select" required>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="create-private">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Group Modal -->
+<div class="modal fade" id="groupModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="groupModalLabel">Grupni razgovor</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <label for="group-name">Group name:</label>
+                <input type="text" class="form-control" id="group-name" placeholder="Enter group name" required>
+
+                <div class="checkbox-group mt-3" id="user-group-select">
+                    <label>Pick users:</label>
+
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="create-group">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+    /*
+
+    implementirati notifikacije, pozivanje nekoga preko emaila
+    Omoguciti napustanje grupnog razgovora
+    pripremiti docker i non docker verziju
+
+ */
+    const group_button = document.getElementById('create-group');
+    const private_button = document.getElementById('create-private');
+    const socket = io();
+    const inbox = document.getElementById('chat-list');
+    let usernameList = [];
+    let allUsersList = [];
+    const privateRoomList = [];
+    const privateRoomNameList = [];
+    const userID = "<%= user.id %>";
+    const mainUsername = "<%= user.username %>";
+
+    let rooms = {};
+
+    async function getUsernames() {
+        const response = await axios.get(`http://localhost:3001/chat/get_rooms_and_users/${userID}`);
+        allUsersList = response.data.allUsers;
+        usernameList = response.data.listUsers;
+        privateRoomList.push(response.data.roomList);
+        privateRoomNameList.push(response.data.roomNameList);
+        rooms = privateRoomList[0].map((roomId, index) => ({
+            id: roomId,
+            name: privateRoomNameList[0][index]
+        }));
+
+
+
+    }
+
+    async function getUserID(user) {
+        const response = await axios.get(`http://localhost:3001/chat/get_user_id/${user}`);
+        return response.data.id;
+    }
+
+    function goToRoom(roomID) {
+        socket.emit('join_private', {userID : userID, roomID : roomID});
+        window.location.href = `/chat/soba/${roomID}`;
+    }
+
+
+    $(document).ready(async function () {
+        await getUsernames();
+        const selectPrivateUsers = document.getElementById('user-select');
+        const selectGroupUsers = document.getElementById('user-group-select');
+        if(usernameList.length == 0) private_button.style.display='none';
+
+        usernameList.map(user => {
+            selectPrivateUsers.innerHTML += `<option value="${user}">${user}</option>`;
+        });
+
+
+        allUsersList.forEach(user => {
+              selectGroupUsers.innerHTML += `<div><input type="checkbox" id="${user}" name = userSelect value="${user}" required> ${user}</div>`;
+        });
+
+        if (rooms.length > 0) {
+            rooms.map(room => {
+                inbox.innerHTML += `
+                <li class="chat-item" id = ${room.id}>
+                    <span class="chat-name"  >${room.name}</span>
+                </li>
+            `;
+            });
+            rooms.map(room => {
+                const roomElement = document.getElementById(`${room.id}`);
+                roomElement.addEventListener('click', () => goToRoom(room.id));
+            });
+        }
+    });
+
+    private_button.addEventListener('click', async () => {
+        let private_id = uuid.v4();
+        let selectedUser = document.getElementById('user-select').value;
+        let selectedUserID = await getUserID(selectedUser);
+        let userObject = {currentUser: userID, selectedUser: selectedUserID, name: selectedUser, currentUsername : mainUsername};
+        let selectPrivateUsers = document.getElementById('user-select');
+        socket.emit('create_private', {conversation_id: private_id, user: userObject});
+
+        let filteredUserList = usernameList.filter(user => user !== selectedUser && user !== mainUsername);
+        usernameList = filteredUserList;
+        if(filteredUserList.length == 0) private_button.style.display='none';
+        $('#privateModal').modal('hide');
+        selectPrivateUsers.innerHTML = '';
+
+        filteredUserList.forEach(user => {
+            selectPrivateUsers.innerHTML += `<option value="${user}">${user}</option>`;
+        });
+
+        inbox.innerHTML += `
+        <li class="chat-item">
+            <span id="${private_id}" class="chat-name">Conversation between ${selectedUser} and ${mainUsername}</span>
+        </li>
+        `;
+        const roomElement = document.getElementById(`${private_id}`);
+        roomElement.addEventListener('click', () => goToRoom(private_id));
+
+    });
+
+    group_button.addEventListener('click', async () => {
+        let group_id = uuid.v4();
+        const selectGroupUsers = document.getElementById('user-group-select');
+        var checkedBoxes = document.querySelectorAll('input[name=userSelect]:checked');
+        let selectedUsers = [];
+        let selectedUsersID = [];
+        checkedBoxes.forEach(user =>{
+            selectedUsers.push(user.value);
+        });
+        for (let user of selectedUsers) {
+            let selectedID = await getUserID(user);
+            selectedUsersID.push(selectedID);
+        }
+        let convName = document.getElementById('group-name').value;
+        if(convName != ""){
+            let userObject = {currentUser: userID, selectedUserList: selectedUsersID, group_name: convName};
+            socket.emit('create_group', {conversation_id: group_id, user: userObject});
+
+            inbox.innerHTML += `
+        <li class="chat-item">
+            <span id="${group_id}" class="chat-name">${convName}</span>
+        </li>
+        `;
+            $('#groupModal').modal('hide');
+        }
+
+    });
+
+    document.getElementById('logout-button').addEventListener('click', function() {
+
+        axios.get('http://localhost:3001/chat/logout')
+            .then(response => {
+                window.location.href = '/login';
+            })
+            .catch(error => {
+                console.error('Error logging out:', error);
+            });
+    });
+
+
+</script>
+</html>

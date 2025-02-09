@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.IO chat</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system;
+            background-color: #122a3d;
+            color: white;
+            display: flex;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        #members {
+            background: #1f2c3d;
+            width: 100%;
+            height: 100%;
+            padding: 1rem;
+            box-sizing: border-box;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #members h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .member {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+
+        .member span {
+            margin-left: 0.5rem;
+            font-size: 1.2rem;
+        }
+
+        .status {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .online {
+            background-color: green;
+        }
+
+        .offline {
+            background-color: grey;
+        }
+
+        #goBack {
+            background-color: #333;
+            border: none;
+            padding: 0.5rem 1rem;
+            margin: 1rem 0;
+            border-radius: 3px;
+            color: #fff;
+            font-size: 1.2rem;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        #goBack i {
+            margin-right: 0.5rem;
+        }
+
+        #messages {
+            width: 75%;
+            padding: 1rem;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        #messages ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        #messages > ul > li {
+            padding: 0.5rem 1rem;
+            font-size: 1.25rem;
+            position: relative;
+        }
+
+        #messages > ul > li:nth-child(odd) {
+            background: #efefef;
+            color: black;
+        }
+
+        .reply-btn {
+            position: absolute;
+            top: 50%;
+            right: 60px;
+            transform: translateY(-50%);
+            display: none;
+            cursor: pointer;
+            background: #333;
+            color: white;
+            border-radius: 50%;
+            padding: 0.5rem;
+        }
+
+        .reply-btn:hover {
+            background-color: #555;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+            display: none;
+            cursor: pointer;
+            background: #333;
+            color: white;
+            border-radius: 50%;
+            padding: 0.5rem;
+        }
+
+        .delete-btn:hover {
+            background-color: #555;
+        }
+
+        .message-item:hover .reply-btn {
+            display: block;
+        }
+
+        .message-item:hover .delete-btn {
+            display: block;
+        }
+
+        #form {
+            background: rgba(0, 0, 0, 0.15);
+            padding: 0.25rem;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            height: 4rem;
+            box-sizing: border-box;
+            backdrop-filter: blur(10px);
+        }
+
+        #input {
+            border: none;
+            padding: 0 2rem;
+            flex-grow: 1;
+            border-radius: 4rem;
+            margin: 0.25rem;
+            font-size: 1.2rem;
+            height: 2.5rem;
+        }
+
+        #input:focus {
+            outline: none;
+        }
+
+        #form > button {
+            background: #333;
+            border: none;
+            padding: 0 1.5rem;
+            margin: 0.25rem;
+            border-radius: 3px;
+            outline: none;
+            color: #fff;
+            font-size: 1.2rem;
+            height: 2.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .member {
+                font-size: 0.9rem;
+            }
+
+            #members h3 {
+                font-size: 1.2rem;
+            }
+
+            .status {
+                width: 12px;
+                height: 12px;
+            }
+
+            #goBack {
+                width: 100%;
+                font-size: 1rem;
+            }
+
+            #messages {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div id="members">
+
+        <h3>Members</h3>
+
+        <div id="members-list"></div>
+        <button id="goBack">
+            <i class="fas fa-arrow-left"></i> Go Back
+        </button>
+    </div>
+
+    <div id="messages">
+        <ul id="messages-list"></ul>
+        <form id="form" action="">
+            <input id="input" autocomplete="off" placeholder="Type a message..."/>
+            <button>Send</button>
+        </form>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const messagesList = document.getElementById('messages-list');
+    const roomId = window.location.pathname.split('/').pop();
+    const senderID = "<%= user %>";
+    const membersDIV = document.getElementById('members-list');
+    let membersAndStatusList = [];
+
+    async function getUsername(user_id) {
+        try {
+            const response = await axios.get(`http://localhost:3001/chat/username/${user_id}`);
+            const obj = response.data.result;
+            return obj[0].username;
+        } catch (error) {
+            console.error('Error getting username:', error.message);
+        }
+    }
+
+    function addReplyOptionToMessage(messageElement) {
+        const replyBtn = document.createElement('span');
+        replyBtn.classList.add('reply-btn');
+        replyBtn.textContent = ' Reply ↩️';
+        replyBtn.addEventListener('click', () => {
+
+            const messageContent = messageElement.textContent.split(':').slice(-1)[0];
+            const shortMessage = messageContent.length > 100 ? messageContent.slice(0,100) + "..." : messageContent;
+            input.value = ` Reply: " ${shortMessage} -> "`;
+        });
+
+        messageElement.appendChild(replyBtn);
+    }
+
+    function addDeleteOptionToMessage(messageElement, idMessage) {
+        const deleteBtn = document.createElement('span');
+        deleteBtn.classList.add('delete-btn');
+        deleteBtn.textContent = '🗑️';
+        deleteBtn.id = idMessage;
+        deleteBtn.addEventListener('click', async () => {
+            try {
+                const response = await axios.delete(`http://localhost:3001/chat/message/${idMessage}`);
+                if (response.status === 200) {
+                    messageElement.remove();
+                } else {
+                    console.log('Error deleting message:', response.data);
+                }
+            } catch (error) {
+                console.error('There was an error!', error);
+            }
+        });
+
+        messageElement.appendChild(deleteBtn);
+    }
+
+
+
+
+    async function getMessages() {
+        try {
+            const response = await axios.get(`http://localhost:3001/chat/porukesobe/${roomId}`);
+            for (let message of response.data.messages) {
+                const username = await getUsername(message.sender_id);
+                const item = document.createElement('li');
+                item.classList.add('message-item');
+                item.id = message.id;
+                item.textContent = `${username}: ${message.content}`;
+                addReplyOptionToMessage(item);
+                if(message.sender_id === senderID) addDeleteOptionToMessage(item, message.id);
+
+                messagesList.appendChild(item);
+            }
+        } catch (error) {
+            console.error('Error getting messages:', error.message);
+        }
+    }
+
+
+    async function getMembers() {
+        try {
+            const response = await axios.get(`http://localhost:3001/chat/get_room_members/${roomId}`);
+            console.log(response.data);
+            for (let member of response.data) {
+                const item = document.createElement('div');
+                item.classList.add('member');
+
+                item.innerHTML = `
+                    <div class="status ${member.online ? 'online' : 'offline'}" id="${member.user_id}"></div>
+                    <span>${member.username}</span>
+                `;
+
+                membersDIV.appendChild(item);
+            }
+            document.getElementById(senderID).classList = "status online";
+        } catch (error) {
+            console.error('Error getting members:', error.message);
+        }
+    }
+
+    $(document).ready(async function () {
+        getMessages();
+        await axios.post(`http://localhost:3001/chat/set_online/${senderID}`);
+        getMembers();
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (input.value) {
+            let messageData = {
+                privateName: roomId,
+                message: input.value,
+                sender_id: senderID
+            };
+
+            socket.emit('send-message', messageData);
+            axios.post("http://localhost:3001/chat/send_message", { messageData: messageData });
+            input.value = '';
+        }
+    });
+
+
+    socket.on('user-status-changed', (data) => {
+        const { userID, online } = data;
+        const userStatusElement = document.getElementById(userID);
+        if (userStatusElement) {
+            userStatusElement.classList = online ? 'status online' : 'status offline';
+        }
+    });
+
+    socket.on('receive-message', async (data) => {
+        const { message, sender_id } = data;
+        const username = await getUsername(sender_id);
+        const item = document.createElement('li');
+        const response = await axios.get("http://localhost:3001/chat/lastid");
+        let number = response.data.id;
+        console.log(number);
+        item.id = number;
+        item.classList.add('message-item');
+        item.textContent = `${username}: ${message}`;
+        if(sender_id === senderID) addDeleteOptionToMessage(item,response.data.id);
+        addReplyOptionToMessage(item);
+        messagesList.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+    });
+
+    document.getElementById('goBack').addEventListener('click', () => {
+        window.history.back();
+    });
+
+
+</script>
+</body>
+</html>
